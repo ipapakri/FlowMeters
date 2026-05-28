@@ -1,0 +1,9 @@
+paho-mqtt==2.1.0
+
+# Web application backend
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
