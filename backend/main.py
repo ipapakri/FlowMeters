@@ -28,7 +28,7 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
 
-from .routers import auth, cumulative, dashboard, devices
+from .routers import auth, cumulative, dashboard, devices, realtime
 from .scheduler import shutdown, startup
 
 
@@ -54,6 +54,7 @@ app.include_router(auth.router)
 app.include_router(devices.router)
 app.include_router(dashboard.router)
 app.include_router(cumulative.router)
+app.include_router(realtime.router)
 
 # ---------------------------------------------------------------------------
 # Serve React SPA (production)

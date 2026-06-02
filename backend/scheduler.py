@@ -271,6 +271,106 @@ def fetch_devices_list(current_user: dict) -> list[dict]:
     return sorted(devices_by_id.values(), key=lambda d: (d.get("name") or "").lower())
 
 
+def _realtime_point_from_item(item: dict, fetched_at: datetime) -> dict:
+    issue = item.get("issueDate") or item.get("statisticsDate") or item.get("createTime")
+    fetched = fetched_at.replace(microsecond=0).isoformat() + "Z"
+
+    # Broker realtime list often nests readings under `data: [{paramName,paramValue,...}]`.
+    # Flatten the common paramName keys into the response shape expected by the frontend.
+    param_rows = item.get("data") if isinstance(item, dict) else None
+    param_map: dict[str, object] = {}
+    unit_map: dict[str, str] = {}
+    if isinstance(param_rows, list):
+        for row in param_rows:
+            if not isinstance(row, dict):
+                continue
+            k = row.get("paramName")
+            if not k:
+                continue
+            kk = str(k).upper()
+            param_map[kk] = row.get("paramValue")
+            u = row.get("paramUnit")
+            if u is not None and str(u).strip():
+                unit_map[kk] = str(u)
+
+    # Prefer the canonical realtime param names when present.
+    # DI+ / DIN: cumulative/accumulated reading
+    flow = _to_float(param_map.get("DI+"))
+    if flow is None:
+        flow = _to_float(param_map.get("DIN"))
+    if flow is None:
+        flow = _to_float(item.get("flow") or item.get("paramValue"))
+
+    instantaneous_flow = _to_float(param_map.get("DQ"))
+    instantaneous_velocity = _to_float(param_map.get("DV"))
+    water_temperature = _to_float(param_map.get("TI"))
+    accumulated_cooling = _to_float(param_map.get("TH"))
+
+    heat = _to_float(param_map.get("THEAT"))
+    if heat is None:
+        heat = _to_float(param_map.get("RH"))
+    if heat is None:
+        heat = _to_float(param_map.get("EQH"))
+
+    return {
+        "deviceId": item.get("deviceId") or item.get("id"),
+        "deviceName": item.get("deviceName") or item.get("name"),
+        "serialNo": item.get("serialNo") or item.get("serial"),
+        "paramName": item.get("paramName"),
+        "flow": flow,
+        "instantaneousFlow": instantaneous_flow if instantaneous_flow is not None else _to_float(item.get("instantaneousFlow")),
+        "instantaneousVelocity": instantaneous_velocity if instantaneous_velocity is not None else _to_float(item.get("instantaneousVelocity")),
+        "waterTemperature": water_temperature if water_temperature is not None else _to_float(item.get("waterTemperature")),
+        "accumulatedCooling": accumulated_cooling if accumulated_cooling is not None else _to_float(item.get("accumulatedCooling")),
+        "heat": heat if heat is not None else _to_float(item.get("heat")),
+        "units": {
+            "flow": unit_map.get("DI+") or unit_map.get("DIN"),
+            "instantaneousFlow": unit_map.get("DQ"),
+            "instantaneousVelocity": unit_map.get("DV"),
+            "waterTemperature": unit_map.get("TI"),
+            "accumulatedCooling": unit_map.get("TH"),
+            "heat": unit_map.get("THEAT") or unit_map.get("RH") or unit_map.get("EQH"),
+        },
+        "issueDate": issue,
+        "fetchedAt": fetched,
+    }
+
+
+def fetch_realtime_snapshot(
+    current_user: dict,
+    *,
+    device_id: int | None = None,
+    page_size: int = 100,
+) -> dict:
+    """
+    Live snapshot: per-device rows from wm/realtime/device/list.
+    Returns { "devices": [...], "points": [...] }.
+    """
+    client = apply_user_token(current_user)
+
+    page_row = 1
+    all_items: list[dict] = []
+    while True:
+        data = client.get_realtime_device_list(page_size=page_size, page_row=page_row)
+        items = _extract_items(data)
+        all_items.extend(items)
+        total = data.get("total", len(all_items)) if isinstance(data, dict) else len(all_items)
+        if len(all_items) >= total or not items:
+            break
+        page_row += 1
+
+    fetched_at = datetime.utcnow()
+    points = [_realtime_point_from_item(item, fetched_at) for item in all_items]
+    # Filter out rows without an id (defensive against odd broker payloads)
+    points = [p for p in points if p.get("deviceId") is not None]
+
+    if device_id is not None:
+        points = [p for p in points if p.get("deviceId") == device_id]
+
+    devices = fetch_devices_list(current_user)
+    return {"devices": devices, "points": points}
+
+
 # ---------------------------------------------------------------------------
 # On-demand fetches
 # ---------------------------------------------------------------------------

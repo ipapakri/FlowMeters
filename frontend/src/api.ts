@@ -26,6 +26,11 @@ export interface DashboardResponse {
   points: DashboardPoint[];
 }
 
+export interface RealtimeResponse {
+  devices: Device[];
+  points: DashboardPoint[];
+}
+
 export interface DashboardPoint {
   deviceId: number | null;
   deviceName: string | null;
@@ -37,6 +42,17 @@ export interface DashboardPoint {
   waterTemperature: number | null;
   accumulatedCooling: number | null;
   heat: number | null;
+  units?: Partial<
+    Record<
+      | "flow"
+      | "instantaneousFlow"
+      | "instantaneousVelocity"
+      | "waterTemperature"
+      | "accumulatedCooling"
+      | "heat",
+      string | null | undefined
+    >
+  >;
   issueDate: string | null;
   fetchedAt: string;
 }
@@ -90,6 +106,11 @@ export async function getDashboard(
 ): Promise<DashboardResponse> {
   const res = await api.get<DashboardResponse>("/dashboard", { params });
   console.log(`dashboard response: ${JSON.stringify(res.data, null, 2)}`);
+  return res.data;
+}
+
+export async function getRealtime(params: { deviceId?: number } = {}): Promise<RealtimeResponse> {
+  const res = await api.get<RealtimeResponse>("/realtime", { params });
   return res.data;
 }
 

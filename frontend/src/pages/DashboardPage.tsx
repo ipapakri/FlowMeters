@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getDashboard } from "../api";
+import { getDashboard, getRealtime } from "../api";
 import type { Device, DashboardPoint } from "../api";
 import { CumulativeChart } from "../components/CumulativeChart";
 import { DashboardChart } from "../components/DashboardChart";
@@ -30,6 +30,11 @@ export function DashboardPage({ username, onLogout }: Props) {
 
   const dashboardData = useMemo(() => allDashboardData, [allDashboardData]);
 
+  const [realtimePoints, setRealtimePoints] = useState<DashboardPoint[]>([]);
+  const [realtimeLoading, setRealtimeLoading] = useState(false);
+  const [realtimeError, setRealtimeError] = useState<string | null>(null);
+  const [realtimeFetchedAt, setRealtimeFetchedAt] = useState<string | null>(null);
+
   const refreshDashboard = useCallback(() => {
     if (selected !== "all") return;
     setDashboardError(null);
@@ -51,7 +56,35 @@ export function DashboardPage({ username, onLogout }: Props) {
     refreshDashboard();
   }, [refreshDashboard]);
 
+  const refreshRealtime = useCallback(() => {
+    setRealtimeError(null);
+    setRealtimeLoading(true);
+    const deviceId = selected === "all" ? undefined : selected;
+    getRealtime({ deviceId })
+      .then(({ devices: deviceList, points }) => {
+        if (Array.isArray(deviceList) && deviceList.length) setDevices(deviceList);
+        setRealtimePoints(Array.isArray(points) ? points : []);
+        const fetchedAt = points?.[0]?.fetchedAt ?? new Date().toISOString();
+        setRealtimeFetchedAt(fetchedAt);
+      })
+      .catch((err) => {
+        console.error(err);
+        setRealtimeError("Failed to load realtime values.");
+      })
+      .finally(() => setRealtimeLoading(false));
+  }, [selected]);
+
+  useEffect(() => {
+    refreshRealtime();
+    const timer = window.setInterval(refreshRealtime, 30000);
+    return () => window.clearInterval(timer);
+  }, [refreshRealtime]);
+
   const selectedDevice = devices.find((d) => d.id === selected);
+  const selectedRealtimePoint =
+    selected === "all"
+      ? null
+      : realtimePoints.find((p) => p.deviceId === selected) ?? null;
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -172,6 +205,14 @@ export function DashboardPage({ username, onLogout }: Props) {
               />
             </div>
 
+            <LiveValuesPanel
+              title="Live values (all devices)"
+              points={realtimePoints}
+              loading={realtimeLoading}
+              error={realtimeError}
+              fetchedAt={realtimeFetchedAt}
+            />
+
             <DashboardChart
               data={dashboardData}
               loading={dashboardLoading}
@@ -183,10 +224,19 @@ export function DashboardPage({ username, onLogout }: Props) {
             />
           </>
         ) : selectedDevice ? (
-          <CumulativeChart
-            deviceId={selectedDevice.id}
-            deviceName={selectedDevice.name ?? `Device ${selectedDevice.id}`}
-          />
+          <>
+            <LiveValuesCard
+              deviceName={selectedDevice.name ?? `Device ${selectedDevice.id}`}
+              point={selectedRealtimePoint}
+              loading={realtimeLoading}
+              error={realtimeError}
+              fetchedAt={realtimeFetchedAt}
+            />
+            <CumulativeChart
+              deviceId={selectedDevice.id}
+              deviceName={selectedDevice.name ?? `Device ${selectedDevice.id}`}
+            />
+          </>
         ) : (
           <div className="flex items-center justify-center h-64 text-slate-500">
             Select a device to view its data.
@@ -212,5 +262,207 @@ function StatCard({
       <div className="text-lg font-bold text-white">{value}</div>
       <div className="text-xs text-slate-400 mt-0.5">{label}</div>
     </div>
+  );
+}
+
+function fmtNumber(value: number | null): string {
+  if (value === null || Number.isNaN(value)) return "—";
+  const nf = new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 });
+  return nf.format(value);
+}
+
+type LiveKey =
+  | "flow"
+  | "instantaneousFlow"
+  | "instantaneousVelocity"
+  | "waterTemperature"
+  | "accumulatedCooling"
+  | "heat";
+
+const LIVE_FIELDS: Array<{ key: LiveKey; label: string }> = [
+  { key: "instantaneousFlow", label: "Instant flow" },
+  { key: "instantaneousVelocity", label: "Velocity" },
+  { key: "waterTemperature", label: "Temp" },
+  { key: "flow", label: "Flow" },
+  { key: "accumulatedCooling", label: "Cooling" },
+  { key: "heat", label: "Heat" },
+];
+
+function commonUnit(points: DashboardPoint[], key: LiveKey): string | null {
+  const units = new Set<string>();
+  for (const p of points) {
+    const u = p.units?.[key];
+    if (typeof u === "string" && u.trim()) units.add(u.trim());
+  }
+  if (units.size === 1) return [...units][0];
+  return null;
+}
+
+function LiveValuesPanel({
+  title,
+  points,
+  loading,
+  error,
+  fetchedAt,
+}: {
+  title: string;
+  points: DashboardPoint[];
+  loading: boolean;
+  error: string | null;
+  fetchedAt: string | null;
+}) {
+  const keysToShow = useMemo(() => {
+    return LIVE_FIELDS.filter(({ key }) =>
+      points.some((p) => (p as any)?.[key] !== null && (p as any)?.[key] !== undefined)
+    );
+  }, [points]);
+
+  const sorted = useMemo(() => {
+    return [...points].sort((a, b) => {
+      const an = (a.deviceName ?? "").toLowerCase();
+      const bn = (b.deviceName ?? "").toLowerCase();
+      return an.localeCompare(bn);
+    });
+  }, [points]);
+
+  return (
+    <section className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 mb-6">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-white truncate">{title}</div>
+          <div className="text-xs text-slate-400">
+            {fetchedAt ? `Updated ${new Date(fetchedAt).toLocaleTimeString()}` : "—"}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {loading && (
+            <span className="text-xs text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded-full">
+              Updating…
+            </span>
+          )}
+          {error && (
+            <span className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">
+              {error}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="text-sm text-slate-400">No realtime values available.</div>
+      ) : keysToShow.length === 0 ? (
+        <div className="text-sm text-slate-400">
+          Realtime data received, but no numeric fields were present.
+        </div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-slate-400">
+              <tr className="border-b border-slate-700/50">
+                <th className="text-left font-medium py-2 pr-4">Device</th>
+                {keysToShow.map(({ key, label }) => {
+                  const unit = commonUnit(points, key);
+                  return (
+                    <th key={key} className="text-right font-medium py-2 px-2">
+                      {unit ? `${label} (${unit})` : label}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((p) => (
+                <tr key={`${p.deviceId ?? "unknown"}`} className="border-b border-slate-700/30">
+                  <td className="py-2 pr-4 text-slate-200">
+                    {p.deviceName ?? `Device ${p.deviceId ?? "—"}`}
+                    {p.serialNo ? (
+                      <span className="ml-2 text-xs text-slate-500">{p.serialNo}</span>
+                    ) : null}
+                  </td>
+                  {keysToShow.map(({ key }) => (
+                    <td key={key} className="py-2 px-2 text-right tabular-nums text-slate-100">
+                      {fmtNumber((p as any)?.[key] ?? null)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LiveValuesCard({
+  deviceName,
+  point,
+  loading,
+  error,
+  fetchedAt,
+}: {
+  deviceName: string;
+  point: DashboardPoint | null;
+  loading: boolean;
+  error: string | null;
+  fetchedAt: string | null;
+}) {
+  const keysToShow = useMemo(() => {
+    if (!point) return [];
+    return LIVE_FIELDS.filter(({ key }) => (point as any)?.[key] !== null && (point as any)?.[key] !== undefined);
+  }, [point]);
+
+  return (
+    <section className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 mb-6">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-white truncate">
+            Live values — {deviceName}
+          </div>
+          <div className="text-xs text-slate-400">
+            {fetchedAt ? `Updated ${new Date(fetchedAt).toLocaleTimeString()}` : "—"}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {loading && (
+            <span className="text-xs text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded-full">
+              Updating…
+            </span>
+          )}
+          {error && (
+            <span className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">
+              {error}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {!point ? (
+        <div className="text-sm text-slate-400">No realtime values for this device.</div>
+      ) : keysToShow.length === 0 ? (
+        <div className="text-sm text-slate-400">
+          Realtime data received, but no numeric fields were present.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {keysToShow.map(({ key, label }) => {
+            const unit = point.units?.[key];
+            return (
+              <div
+                key={key}
+                className="bg-slate-900/30 border border-slate-700/40 rounded-lg p-3"
+              >
+                <div className="text-xs text-slate-400">
+                  {unit ? `${label} (${unit})` : label}
+                </div>
+              <div className="text-lg font-semibold text-white tabular-nums">
+                {fmtNumber((point as any)?.[key] ?? null)}
+              </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
