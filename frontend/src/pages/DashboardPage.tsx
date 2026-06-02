@@ -58,75 +58,81 @@ export function DashboardPage({ username, onLogout }: Props) {
       {/* Top bar */}
       <header className="bg-slate-800/80 backdrop-blur border-b border-slate-700/50 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-4">
-          {/* Brand */}
-          <div className="flex items-center gap-2 mr-4">
-            <svg
-              className="w-6 h-6 text-blue-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+          {/* Left cluster */}
+          <div className="flex items-center gap-4 min-w-0 flex-1">
+            {/* Brand */}
+            <div className="flex items-center gap-2 shrink-0">
+              <svg
+                className="w-6 h-6 text-blue-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+              <span className="font-bold text-white hidden sm:block">
+                FlowMeters
+              </span>
+            </div>
+
+            {/* Device selector */}
+            <div className="flex-1 min-w-0 sm:flex-none">
+              <DeviceSelect
+                devices={devices}
+                selected={selected}
+                onChange={setSelected}
+                loading={dashboardLoading && selected === "all"}
               />
-            </svg>
-            <span className="font-bold text-white hidden sm:block">
-              FlowMeters
-            </span>
+            </div>
+
+            {/* Device count badge */}
+            {devices.length > 0 && (
+              <span className="hidden sm:inline text-xs text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full shrink-0">
+                {devices.length} device{devices.length !== 1 ? "s" : ""}
+              </span>
+            )}
           </div>
 
-          {/* Device selector */}
-          <DeviceSelect
-            devices={devices}
-            selected={selected}
-            onChange={setSelected}
-            loading={dashboardLoading && selected === "all"}
-          />
-
-          {/* Device count badge */}
-          {devices.length > 0 && (
-            <span className="hidden sm:inline text-xs text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
-              {devices.length} device{devices.length !== 1 ? "s" : ""}
-            </span>
-          )}
-
-          <div className="flex-1" />
-
-          {/* Refresh button */}
-          <button
-            onClick={selected === "all" ? refreshDashboard : undefined}
-            title="Refresh"
-            className="p-2 text-slate-400 hover:text-white transition rounded-lg hover:bg-slate-700/50"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-          </button>
-
-          {/* User / logout */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-400 hidden sm:block">
-              {username}
-            </span>
+          {/* Right cluster */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Refresh button */}
             <button
-              onClick={onLogout}
-              className="text-sm text-slate-400 hover:text-red-400 transition px-3 py-1.5 rounded-lg hover:bg-red-500/10"
+              onClick={selected === "all" ? refreshDashboard : undefined}
+              title="Refresh"
+              className="p-2 text-slate-400 hover:text-white transition rounded-lg hover:bg-slate-700/50"
             >
-              Sign out
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
             </button>
+
+            {/* User / logout */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-400 hidden sm:block">
+                {username}
+              </span>
+              <button
+                onClick={onLogout}
+                className="text-sm text-slate-400 hover:text-red-400 transition px-3 py-1.5 rounded-lg hover:bg-red-500/10"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
       </header>

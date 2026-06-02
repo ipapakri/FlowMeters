@@ -9,16 +9,18 @@ interface Props {
 
 export function DeviceSelect({ devices, selected, onChange, loading }: Props) {
   return (
-    <div className="flex items-center gap-2">
-      <label className="text-sm text-slate-400 whitespace-nowrap">Device</label>
-      <div className="relative">
+    <div className="flex items-center gap-2 min-w-0">
+      <label className="hidden sm:block text-sm text-slate-400 whitespace-nowrap">
+        Device
+      </label>
+      <div className="relative flex-1 min-w-0 sm:flex-none sm:min-w-[180px]">
         <select
           value={selected === "all" ? "all" : String(selected)}
           onChange={(e) =>
             onChange(e.target.value === "all" ? "all" : Number(e.target.value))
           }
           disabled={loading}
-          className="appearance-none bg-slate-800 border border-slate-600 text-white rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer min-w-[180px]"
+          className="appearance-none bg-slate-800 border border-slate-600 text-white rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer w-full min-w-[8rem] sm:w-auto sm:min-w-[180px]"
         >
           <option value="all">All devices</option>
           {devices.map((d) => (
