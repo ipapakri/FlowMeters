@@ -203,6 +203,45 @@ def _filter_dashboard_items_for_category(items: list[dict], fetched_at: datetime
     return out
 
 
+def _filter_cumulative_items_for_category(items: list[dict], fetched_at: datetime, category: int) -> list[dict]:
+    """
+    The broker returns fixed-length buckets for some dashboard categories:
+      - Past Month (category=3): returns all days in current month, including future days.
+      - Past Year  (category=4): returns 12 months, including future months.
+    Discard the future buckets so the chart only shows "real" data.
+    """
+    if category not in (0, 1):
+        return items
+
+    out: list[dict] = []
+    today = fetched_at.date()
+
+    if category == 0:
+        # Expect createTime like "YYYY-MM-DD"
+        for it in items:
+            raw = str(it.get("createTime", "")).strip()
+            try:
+                d = datetime.strptime(raw, "%Y-%m-%d").date()
+            except Exception:
+                continue
+            out.append(it)
+            if d.year == today.year and d.month == today.month and d <= today:
+                break
+        return out
+
+    # category == 1
+    # Expect createTime like "YYYY-MM"
+    for it in items:
+        raw = str(it.get("createTime", "")).strip()
+        try:
+            dt = datetime.strptime(raw, "%Y-%m")
+        except Exception:
+            continue
+        out.append(it)
+        if dt.year == today.year and dt.month == today.month:
+            break
+    return out
+
 def _dashboard_point_from_item(item: dict, fetched_at: datetime) -> dict:
     """
     Map wm/device/dashboard/data/list rows.
@@ -229,7 +268,7 @@ def _dashboard_point_from_item(item: dict, fetched_at: datetime) -> dict:
         }
 
     issue = item.get("issueDate") or item.get("statisticsDate")
-    fetched = issue or fetched_at.isoformat() + "Z"
+    fetched = issue or fetched_at.isoformat()# + "Z"
     return {
         "deviceId": item.get("deviceId") or item.get("id"),
         "deviceName": item.get("deviceName"),
@@ -273,7 +312,7 @@ def fetch_devices_list(current_user: dict) -> list[dict]:
 
 def _realtime_point_from_item(item: dict, fetched_at: datetime) -> dict:
     issue = item.get("issueDate") or item.get("statisticsDate") or item.get("createTime")
-    fetched = fetched_at.replace(microsecond=0).isoformat() + "Z"
+    fetched = fetched_at.replace(microsecond=0).isoformat()# + "Z"
 
     # Broker realtime list often nests readings under `data: [{paramName,paramValue,...}]`.
     # Flatten the common paramName keys into the response shape expected by the frontend.
@@ -538,8 +577,9 @@ def fetch_cumulative_for_device(
     finally:
         db.close()
 
-    fetched_at = datetime.utcnow().isoformat()
-    print(f"cumulative data: {json.dumps(items, indent=2)}")
+    fetched_at = datetime.utcnow()
+    items = _filter_cumulative_items_for_category(items, fetched_at, category)
+    print(f"filtered cumulative data: {json.dumps(items, indent=2)}")
     logger.info(": device %d, %d row(s)", device_id, len(items))
     return [
         {
